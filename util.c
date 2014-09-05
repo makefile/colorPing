@@ -1,5 +1,7 @@
 #include"util.h"
 extern int nsend,nreceived,max_no_packets;
+extern int tmax,tmin;
+extern unsigned int tsum;
 struct timeval tvrecv;
 /*两种计算时间的方式：接受时的时间都按gettimeofday,而发送时间一种将发送时间作为全局或共享的，另一种就是在发送包的数据区域（最大65535b，即64k）中填充时间，从接受到的响应包中读请求包的发送时间，因为响应包会复制请求包的数据区域中的所有数据。因此可以在数据区域填充MAC地址等*/
 void send_packet(struct param *p){
@@ -22,6 +24,7 @@ void send_packet(struct param *p){
 		recv_packet(sockfd,pid);
 		sleep(1);//1s,notice the sleep must be after recv_packet
 	}
+	statistics(SIGCONT);
 }
 int pack(int pack_no,int pid){
 	int packsize;
@@ -112,14 +115,17 @@ int unpack(char *buf,int len,int pid){
 		tv_sub(&tvrecv,tvsend);//计算发送与接受差值,存于tvrecv
 		rtt=(tvrecv.tv_sec)*1000+tvrecv.tv_usec/1000;
 		//差值 毫秒
-		printf("%d byte from %s: icmp_seq=%u ttl=%d rtt=%.3f ms\n",len,inet_ntoa(from.sin_addr),icmp->icmp_seq,ip->ip_ttl,rtt);
+		printf("\033[32;40m%d byte from %s: icmp_seq=%u ttl=%d time=\033[0m\033[34;42m%.1f\033[0m ms\n",len,inet_ntoa(from.sin_addr),icmp->icmp_seq,ip->ip_ttl,rtt);
+		tsum+=rtt;
+		if(rtt<=tmin) tmin=rtt;
+		else if(rtt>tmax) tmax=rtt;
 	}
 	else if (icmp->icmp_type==ICMP_DEST_UNREACH){
-		printf("icmp_seq=%d,host unreachable\\r",icmp->icmp_seq);
+		printf("icmp_seq=%d,host unreachable\n",icmp->icmp_seq);
 	
 //		printf("icmp_type:%d,expect:%d id:%d\n",icmp->icmp_type,ICMP_ECHOREPLY,icmp->icmp_id);
-	//	return -1;
 	}
+	return 0;
 }
 void tv_sub(struct timeval *rec,struct timeval *sent){
 	if((rec->tv_usec-=sent->tv_usec)<0){
@@ -129,8 +135,15 @@ void tv_sub(struct timeval *rec,struct timeval *sent){
 	rec->tv_sec-=sent->tv_sec;
 }
 void statistics(int signo){
-	printf("\n--------------PING statistics------------\n");
-	printf("%d packets transmitted,%d received,%%%.2f lost\n",nsend,nreceived,(nsend-nreceived)*1.0/nsend*100);
+	(void)signal(SIGINT, SIG_IGN);//prevent from user interupt,when counting
+	putchar('\n');
+	fflush(stdout);
+	printf("\033[35;40m---- PING statistics ----\033[0m\n");
+	//40~47=30~37:黑 红 绿 黄 蓝 紫 深绿 白
+	//\033[foreground;background
+	printf("\033[32;40m%d packets transmitted, %d received, %.2f%% loss\033[0m\n",nsend,nreceived,(nsend-nreceived)*1.0/nsend*100);
+	printf("\033[36;40mrtt min/avg/max = %.2lf/%.2lf/%.2lf ms\033[0m\n",//loss mdev
+			(double)tmin,tsum/(double)nreceived,(double)tmax);//rtt:round trip time
 	if(signo==SIGALRM||signo==SIGINT) exit(1);
 	//超时或用户中断，统计并退出
 

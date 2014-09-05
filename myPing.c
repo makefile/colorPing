@@ -14,6 +14,8 @@
 #include"util.h"
 int nsend=0,nreceived=0,max_no_packets=4;
 //这是全局变量，在util.c中通过extern来跨文件使用，不要将普通变量放在头文件中，会导致重复定义，即使放到ifndef中也不行，但似乎结构体等类型可以。
+int tmin=10000,tmax=0;//round trip time
+unsigned int tsum=0;//for average
 void printUsage();
 int main(int argc,char **argv){
 	int sockfd;
@@ -76,10 +78,9 @@ int main(int argc,char **argv){
 	printf("PING %s(%s): %d bytes of data in ICMP packets.\n",argv[0],inet_ntoa(dest_addr.sin_addr),DATA_LEN);
 
 	pid=getpid();//获取当前进程ID，作为多个ICMP进程的区分
-	pthread_t thd;
+	//pthread_t thd;
 	struct param p={sockfd,pid,dest_addr};
 	//int ret=pthread_create(&thd,NULL,(void*)send_packet,&p);
-//	printf("here1\n");
 	send_packet(&p);
 	signal(SIGINT,statistics);
 	//捕捉中断信号，ctrl+c产生SIGINT，立刻统计百分比,注意安装信号要放在join等待之前，开始发包之后，否则不显示统计结果
@@ -90,7 +91,7 @@ int main(int argc,char **argv){
 	else printf("join normal\n");
 */
 //	recv_packet(sockfd,pid);
-	statistics(SIGCONT);//此处在收包完毕后显式调用，另外在recv_packet()中超时时也会调用，调用一次就退出程序。此处随便传入一个信号即可，alarm,continue,quit等
+	//statistics(SIGCONT);//此处在收包完毕后显式调用，另外在recv_packet()中超时时也会调用，调用一次就退出程序。此处随便传入一个信号即可，alarm,continue,quit等
 	close(sockfd);
 	return 0;
 }
